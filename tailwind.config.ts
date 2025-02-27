@@ -69,6 +69,8 @@ export default {
 				'app-pink': '#FF66B2',
 				'app-purple': '#9966FF',
 				'app-green': '#00E676',
+				'app-red': '#EF4444',
+				'app-gray': '#9CA3AF',
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
