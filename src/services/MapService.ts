@@ -2,7 +2,7 @@
 // MapService handles map operations and location data
 class MapService {
   // Default Mapbox token (public token for demo purposes)
-  private static readonly DEFAULT_MAPBOX_TOKEN = 'pk.eyJ1IjoibG92YWJsZS1haS1kZW1vIiwiYSI6ImNsdmh1dWVvazAxczQyanBnOTk3dmxldm0ifQ.a7r5inWxbJVersIS6GN4ZA';
+  private static readonly DEFAULT_MAPBOX_TOKEN = 'pk.eyJ1IjoibG92YWJsZS1haS1kZW1vIiwiYSI6ImNsdmh2ZmU3ZTAxN3MycnA5NnFxZ2JvczAifQ.QNiWueGt6K6GZrOJrVEkvA';
   
   // Store tagged locations 
   private static taggedLocations: TaggedLocation[] = [];
