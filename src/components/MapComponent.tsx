@@ -34,98 +34,110 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
 
     // Get Mapbox token from service
     const mapboxToken = MapService.getMapboxToken();
+    if (!mapboxToken) {
+      console.error("No Mapbox token available");
+      return;
+    }
+    
     mapboxgl.accessToken = mapboxToken;
 
     // Initialize the map
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [0, 0], // Default center
-      zoom: 2,
-    });
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [0, 0], // Default center
+        zoom: 2,
+      });
 
-    // Add navigation controls
-    map.current.addControl(
-      new mapboxgl.NavigationControl(),
-      'top-right'
-    );
+      console.log("Map initialized successfully");
 
-    // Set up click handler for tagging mode
-    map.current.on('click', (e) => {
-      if (taggingMode) {
-        const { lng, lat } = e.lngLat;
-        setSelectedLocation({ lng, lat });
-        
-        // Add temporary marker
-        if (marker.current) {
-          marker.current.remove();
-        }
-        
-        // Create custom marker element
-        const el = document.createElement('div');
-        el.className = 'map-marker animate-bounce';
-        el.innerHTML = `<span class="text-xl">📍</span>`;
-        
-        // Add marker to map
-        marker.current = new mapboxgl.Marker(el)
-          .setLngLat([lng, lat])
-          .addTo(map.current!);
+      // Add navigation controls
+      map.current.addControl(
+        new mapboxgl.NavigationControl(),
+        'top-right'
+      );
+
+      // Set up click handler for tagging mode
+      map.current.on('click', (e) => {
+        if (taggingMode) {
+          const { lng, lat } = e.lngLat;
+          setSelectedLocation({ lng, lat });
           
-        // Show the tag form
-        setShowTagForm(true);
-      }
-    });
-
-    // On map load, add navigation line source
-    map.current.on('load', () => {
-      console.log("Map loaded successfully");
-      
-      map.current!.addSource('navigation-route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: []
+          // Add temporary marker
+          if (marker.current) {
+            marker.current.remove();
           }
+          
+          // Create custom marker element
+          const el = document.createElement('div');
+          el.className = 'map-marker animate-bounce';
+          el.innerHTML = `<span class="text-xl">📍</span>`;
+          
+          // Add marker to map
+          marker.current = new mapboxgl.Marker(el)
+            .setLngLat([lng, lat])
+            .addTo(map.current!);
+            
+          // Show the tag form
+          setShowTagForm(true);
         }
       });
-      
-      map.current!.addLayer({
-        id: 'navigation-route',
-        type: 'line',
-        source: 'navigation-route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#FF66B2',
-          'line-width': 5,
-          'line-opacity': 0.8
-        }
+
+      // On map load, add navigation line source
+      map.current.on('load', () => {
+        console.log("Map loaded successfully");
+        
+        map.current!.addSource('navigation-route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: []
+            }
+          }
+        });
+        
+        map.current!.addLayer({
+          id: 'navigation-route',
+          type: 'line',
+          source: 'navigation-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#FF66B2',
+            'line-width': 5,
+            'line-opacity': 0.8
+          }
+        });
+        
+        navigationLine.current = map.current!.getSource('navigation-route') as mapboxgl.GeoJSONSource;
+        
+        // Load and display saved tagged locations
+        loadTaggedLocations();
+        
+        // Get user's current position
+        getCurrentPosition();
       });
-      
-      navigationLine.current = map.current!.getSource('navigation-route') as mapboxgl.GeoJSONSource;
-      
-      // Load and display saved tagged locations
-      loadTaggedLocations();
-      
-      // Get user's current position
-      getCurrentPosition();
-    });
 
-    // Setup interval to update current position
-    const positionInterval = setInterval(() => {
-      getCurrentPosition();
-    }, 10000); // Update every 10 seconds
+      // Setup interval to update current position
+      const positionInterval = setInterval(() => {
+        getCurrentPosition();
+      }, 10000); // Update every 10 seconds
 
-    // Cleanup on unmount
-    return () => {
-      map.current?.remove();
-      clearInterval(positionInterval);
-    };
+      // Cleanup on unmount
+      return () => {
+        map.current?.remove();
+        clearInterval(positionInterval);
+      };
+    } catch (error) {
+      console.error("Error initializing map:", error);
+      toast.error("Failed to initialize map. Please check your Mapbox token.");
+    }
   }, []);
 
   // Update current location marker

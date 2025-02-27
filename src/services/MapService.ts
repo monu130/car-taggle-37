@@ -1,15 +1,33 @@
 
 // MapService handles map operations and location data
 class MapService {
-  // Default Mapbox token (public token for demo purposes)
-  private static readonly DEFAULT_MAPBOX_TOKEN = 'pk.eyJ1IjoibG92YWJsZS1haS1kZW1vIiwiYSI6ImNsdmh2ZmU3ZTAxN3MycnA5NnFxZ2JvczAifQ.QNiWueGt6K6GZrOJrVEkvA';
+  // Default token placeholder (user will need to provide their own token)
+  private static mapboxToken: string | null = null;
   
   // Store tagged locations 
   private static taggedLocations: TaggedLocation[] = [];
 
+  // Set the Mapbox token
+  static setMapboxToken(token: string): void {
+    this.mapboxToken = token;
+    localStorage.setItem('mapbox_token', token);
+  }
+
   // Get the Mapbox token
-  static getMapboxToken(): string {
-    return this.DEFAULT_MAPBOX_TOKEN;
+  static getMapboxToken(): string | null {
+    if (!this.mapboxToken) {
+      // Try to load from localStorage
+      const savedToken = localStorage.getItem('mapbox_token');
+      if (savedToken) {
+        this.mapboxToken = savedToken;
+      }
+    }
+    return this.mapboxToken;
+  }
+
+  // Check if token is set
+  static hasMapboxToken(): boolean {
+    return !!this.getMapboxToken();
   }
 
   // Save a tagged location
