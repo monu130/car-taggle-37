@@ -11,35 +11,68 @@ const Index = () => {
   const [savedLocations, setSavedLocations] = useState<TaggedLocation[]>([]);
   const [showLocationsList, setShowLocationsList] = useState<boolean>(false);
   const [hasToken, setHasToken] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   
   useEffect(() => {
-    // Check if mapbox token exists
-    setHasToken(MapService.hasMapboxToken());
+    const initializeApp = async () => {
+      try {
+        // Initialize MapService which connects to MongoDB
+        await MapService.initialize();
+        
+        // Check if mapbox token exists
+        setHasToken(MapService.hasMapboxToken());
+        
+        // Load saved locations
+        const locations = await MapService.getTaggedLocations();
+        setSavedLocations(locations);
+      } catch (error) {
+        console.error("Error initializing app:", error);
+        toast.error("Something went wrong when connecting to the database");
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    // Load saved locations
-    const locations = MapService.getTaggedLocations();
-    setSavedLocations(locations);
+    initializeApp();
   }, []);
   
   // Refresh the locations list
-  const refreshLocations = () => {
-    const locations = MapService.getTaggedLocations();
-    setSavedLocations(locations);
+  const refreshLocations = async () => {
+    try {
+      setIsLoading(true);
+      const locations = await MapService.getTaggedLocations();
+      setSavedLocations(locations);
+    } catch (error) {
+      console.error("Error refreshing locations:", error);
+      toast.error("Could not load your saved locations");
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Delete a location
-  const deleteLocation = (id: string) => {
-    MapService.deleteTaggedLocation(id);
-    refreshLocations();
-    toast('Location deleted successfully!');
+  const deleteLocation = async (id: string) => {
+    try {
+      await MapService.deleteTaggedLocation(id);
+      await refreshLocations();
+      toast('Location deleted successfully!');
+    } catch (error) {
+      console.error("Error deleting location:", error);
+      toast.error("Could not delete the location");
+    }
   };
   
   // Clear all locations
-  const clearAllLocations = () => {
+  const clearAllLocations = async () => {
     if (confirm('Are you sure you want to delete all saved locations?')) {
-      MapService.clearTaggedLocations();
-      refreshLocations();
-      toast('All locations cleared!');
+      try {
+        await MapService.clearTaggedLocations();
+        await refreshLocations();
+        toast('All locations cleared!');
+      } catch (error) {
+        console.error("Error clearing locations:", error);
+        toast.error("Could not clear all locations");
+      }
     }
   };
   
@@ -103,6 +136,28 @@ const Index = () => {
           </div>
         </section>
         
+        {/* Database Connection Status */}
+        <section className="mb-4">
+          <div className="glass-panel">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-app-yellow animate-pulse' : 'bg-app-green'}`}></div>
+                <span className="text-sm text-gray-600">
+                  {isLoading ? 'Connecting to database...' : 'Database connected'}
+                </span>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={refreshLocations}
+                disabled={isLoading}
+              >
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </section>
+        
         {/* Token input or map section */}
         {!hasToken ? (
           <section className="mb-6">
@@ -112,7 +167,7 @@ const Index = () => {
           <>
             {/* Map section */}
             <section className="mb-6">
-              <MapComponent />
+              <MapComponent onLocationsUpdated={refreshLocations} />
             </section>
             
             {/* Saved locations list */}
@@ -125,8 +180,9 @@ const Index = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-red-500 flex items-center gap-1"
+                        className="text-app-red flex items-center gap-1"
                         onClick={clearAllLocations}
+                        disabled={isLoading}
                       >
                         <Trash2 className="w-4 h-4" />
                         Clear All
@@ -134,7 +190,11 @@ const Index = () => {
                     )}
                   </div>
                   
-                  {savedLocations.length === 0 ? (
+                  {isLoading ? (
+                    <div className="flex justify-center items-center py-10">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-app-blue"></div>
+                    </div>
+                  ) : savedLocations.length === 0 ? (
                     <div className="text-center py-6">
                       <p className="text-gray-500">You don't have any saved locations yet.</p>
                       <p className="text-gray-500 mt-2">
@@ -175,7 +235,7 @@ const Index = () => {
                                 </svg>
                               </button>
                               <button
-                                className="p-1 rounded-full hover:bg-red-50 text-red-500 transition-colors"
+                                className="p-1 rounded-full hover:bg-red-50 text-app-red transition-colors"
                                 onClick={() => deleteLocation(location.id)}
                                 title="Delete location"
                               >
@@ -244,7 +304,7 @@ const Index = () => {
                 </div>
                 <h3 className="font-bold">View Saved</h3>
                 <p className="text-sm text-gray-600">
-                  Access all your saved locations anytime, anywhere - even offline!
+                  Your locations are saved in the cloud - access them from any device!
                 </p>
               </div>
             </div>

@@ -13,9 +13,13 @@ import * as turf from '@turf/turf';
 
 interface MapComponentProps {
   onLocationSelected?: (location: { lat: number; lng: number }) => void;
+  onLocationsUpdated?: () => void;
 }
 
-const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
+const MapComponent: React.FC<MapComponentProps> = ({ 
+  onLocationSelected,
+  onLocationsUpdated 
+}) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
@@ -28,6 +32,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null);
   const locationMarkers = useRef<{ [id: string]: mapboxgl.Marker }>({});
   const navigationLine = useRef<mapboxgl.GeoJSONSource | null>(null);
+  const [isLoadingMap, setIsLoadingMap] = useState<boolean>(true);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -87,6 +92,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
       // On map load, add navigation line source
       map.current.on('load', () => {
         console.log("Map loaded successfully");
+        setIsLoadingMap(false);
         
         map.current!.addSource('navigation-route', {
           type: 'geojson',
@@ -109,7 +115,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
             'line-cap': 'round'
           },
           paint: {
-            'line-color': '#FF66B2',
+            'line-color': '#3B82F6', // Changed to app-blue instead of pink
             'line-width': 5,
             'line-opacity': 0.8
           }
@@ -136,6 +142,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
       };
     } catch (error) {
       console.error("Error initializing map:", error);
+      setIsLoadingMap(false);
       toast.error("Failed to initialize map. Please check your Mapbox token.");
     }
   }, []);
@@ -189,18 +196,18 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
         },
         (error) => {
           console.error('Error getting location:', error);
-          toast('Could not get your location. Please check your browser permissions.');
+          toast.error('Could not get your location. Please check your browser permissions.');
         }
       );
     } else {
-      toast('Geolocation is not supported by your browser.');
+      toast.error('Geolocation is not supported by your browser.');
     }
   };
 
   // Quick tag current location
   const quickTagCurrentLocation = () => {
     if (!currentPosition) {
-      toast('Cannot tag location: Your current position is not available.');
+      toast.error('Cannot tag location: Your current position is not available.');
       return;
     }
     
@@ -236,23 +243,33 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   };
 
   // Load tagged locations from the service
-  const loadTaggedLocations = () => {
+  const loadTaggedLocations = async () => {
     if (!map.current) return;
 
     // Clear existing markers
     Object.values(locationMarkers.current).forEach(marker => marker.remove());
     locationMarkers.current = {};
 
-    // Get saved locations
-    const locations = MapService.getTaggedLocations();
-    console.log("Loading tagged locations:", locations);
+    try {
+      // Get saved locations from MongoDB
+      const locations = await MapService.getTaggedLocations();
+      console.log("Loading tagged locations:", locations);
 
-    // Add markers for each location with staggered animation
-    locations.forEach((location, index) => {
-      setTimeout(() => {
-        addLocationMarker(location);
-      }, index * 200); // Stagger by 200ms
-    });
+      // Add markers for each location with staggered animation
+      locations.forEach((location, index) => {
+        setTimeout(() => {
+          addLocationMarker(location);
+        }, index * 200); // Stagger by 200ms
+      });
+      
+      // Notify parent component if needed
+      if (onLocationsUpdated) {
+        onLocationsUpdated();
+      }
+    } catch (error) {
+      console.error("Error loading locations:", error);
+      toast.error("Could not load your saved locations");
+    }
   };
 
   // Add a marker for a tagged location
@@ -303,10 +320,10 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
             Created: ${new Date(location.createdAt).toLocaleString()}
           </p>
           <div class="flex gap-2 mt-2">
-            <button class="navigate-btn btn-secondary py-1 px-3 text-sm rounded-full" data-id="${location.id}">
+            <button class="navigate-btn bg-app-blue text-white py-1 px-3 text-sm rounded-full" data-id="${location.id}">
               Navigate Here
             </button>
-            <button class="delete-btn btn-accent py-1 px-3 text-sm rounded-full" data-id="${location.id}">
+            <button class="delete-btn bg-app-red text-white py-1 px-3 text-sm rounded-full" data-id="${location.id}">
               Delete
             </button>
           </div>
@@ -345,69 +362,86 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   };
 
   // Delete a location
-  const deleteLocation = (id: string) => {
+  const deleteLocation = async (id: string) => {
     // Remove the marker from the map
     if (locationMarkers.current[id]) {
       locationMarkers.current[id].remove();
       delete locationMarkers.current[id];
     }
     
-    // Delete from storage
-    MapService.deleteTaggedLocation(id);
-    
-    // Show toast
-    toast('Location deleted successfully!');
+    try {
+      // Delete from MongoDB
+      await MapService.deleteTaggedLocation(id);
+      
+      // Show toast
+      toast.success('Location deleted successfully!');
+      
+      // Notify parent component if needed
+      if (onLocationsUpdated) {
+        onLocationsUpdated();
+      }
+    } catch (error) {
+      console.error("Error deleting location:", error);
+      toast.error("Could not delete location");
+    }
   };
 
   // Navigate to a location
-  const navigateToLocation = (id: string) => {
+  const navigateToLocation = async (id: string) => {
     if (!currentPosition) {
-      toast('Cannot navigate: Your current location is not available.');
+      toast.error('Cannot navigate: Your current location is not available.');
       return;
     }
     
-    // Find the location to navigate to
-    const locations = MapService.getTaggedLocations();
-    const targetLocation = locations.find(loc => loc.id === id);
-    
-    if (!targetLocation) {
-      toast('Location not found.');
-      return;
-    }
-    
-    // Create a simple line between current position and target
-    if (navigationLine.current && map.current) {
-      const route = {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [currentPosition.lng, currentPosition.lat],
-            [targetLocation.longitude, targetLocation.latitude]
-          ]
-        }
-      };
+    try {
+      // Get all locations
+      const locations = await MapService.getTaggedLocations();
       
-      navigationLine.current.setData(route as any);
+      // Find the location to navigate to
+      const targetLocation = locations.find(loc => loc.id === id);
       
-      // Calculate distance
-      const from = turf.point([currentPosition.lng, currentPosition.lat]);
-      const to = turf.point([targetLocation.longitude, targetLocation.latitude]);
-      const distance = turf.distance(from, to, { units: 'kilometers' });
+      if (!targetLocation) {
+        toast.error('Location not found.');
+        return;
+      }
       
-      // Fit the map to show both points
-      const bounds = new mapboxgl.LngLatBounds()
-        .extend([currentPosition.lng, currentPosition.lat])
-        .extend([targetLocation.longitude, targetLocation.latitude]);
+      // Create a simple line between current position and target
+      if (navigationLine.current && map.current) {
+        const route = {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [currentPosition.lng, currentPosition.lat],
+              [targetLocation.longitude, targetLocation.latitude]
+            ]
+          }
+        };
         
-      map.current.fitBounds(bounds, {
-        padding: 100,
-        duration: 1000
-      });
-      
-      // Show toast with distance info
-      toast(`Navigation started! Distance: ${distance.toFixed(2)} km`);
+        navigationLine.current.setData(route as any);
+        
+        // Calculate distance
+        const from = turf.point([currentPosition.lng, currentPosition.lat]);
+        const to = turf.point([targetLocation.longitude, targetLocation.latitude]);
+        const distance = turf.distance(from, to, { units: 'kilometers' });
+        
+        // Fit the map to show both points
+        const bounds = new mapboxgl.LngLatBounds()
+          .extend([currentPosition.lng, currentPosition.lat])
+          .extend([targetLocation.longitude, targetLocation.latitude]);
+          
+        map.current.fitBounds(bounds, {
+          padding: 100,
+          duration: 1000
+        });
+        
+        // Show toast with distance info
+        toast.success(`Navigation started! Distance: ${distance.toFixed(2)} km`);
+      }
+    } catch (error) {
+      console.error("Error navigating to location:", error);
+      toast.error("Could not start navigation");
     }
   };
 
@@ -426,10 +460,10 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   };
 
   // Save a new tagged location
-  const saveTaggedLocation = () => {
+  const saveTaggedLocation = async () => {
     if (!selectedLocation) return;
     if (newTagName.trim() === '') {
-      toast('Please enter a name for this location');
+      toast.error('Please enter a name for this location');
       return;
     }
     
@@ -445,30 +479,52 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     
     console.log("Saving new location:", newLocation);
     
-    // Save to service
-    MapService.saveTaggedLocation(newLocation);
-    
-    // Add marker to map
-    addLocationMarker(newLocation);
-    
-    // Reset form
-    setNewTagName('');
-    setSelectedLocation(null);
-    if (marker.current) {
-      marker.current.remove();
-      marker.current = null;
+    try {
+      // Save to MongoDB
+      await MapService.saveTaggedLocation(newLocation);
+      
+      // Add marker to map
+      addLocationMarker(newLocation);
+      
+      // Reset form
+      setNewTagName('');
+      setSelectedLocation(null);
+      if (marker.current) {
+        marker.current.remove();
+        marker.current = null;
+      }
+      setShowTagForm(false);
+      setTaggingMode(false);
+      
+      // Show success toast
+      toast.success('Location tagged successfully!');
+      
+      // Notify parent component if needed
+      if (onLocationsUpdated) {
+        onLocationsUpdated();
+      }
+    } catch (error) {
+      console.error("Error saving location:", error);
+      toast.error("Could not save location");
     }
-    setShowTagForm(false);
-    setTaggingMode(false);
-    
-    // Show success toast
-    toast('Location tagged successfully!');
   };
 
   return (
     <div className="relative animate-fade-in">
       {/* Main map container */}
-      <div ref={mapContainer} className="map-container h-[500px] w-full rounded-lg shadow-lg" style={{ minHeight: '400px' }} />
+      <div className="relative">
+        <div ref={mapContainer} className="map-container h-[500px] w-full rounded-lg shadow-lg" style={{ minHeight: '400px' }} />
+        
+        {/* Loading overlay */}
+        {isLoadingMap && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-app-blue mb-3"></div>
+              <p className="text-gray-700">Loading map...</p>
+            </div>
+          </div>
+        )}
+      </div>
       
       {/* Floating action buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
@@ -477,6 +533,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
           className="floating-action-button bg-app-blue flex items-center justify-center"
           onClick={quickTagCurrentLocation}
           title="Tag my current location"
+          disabled={isLoadingMap}
         >
           <div className="relative">
             <MapPin className="w-6 h-6" />
@@ -489,6 +546,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
           className={`floating-action-button ${taggingMode ? 'bg-app-green' : 'bg-app-pink'}`}
           onClick={toggleTaggingMode}
           title="Toggle map tagging mode"
+          disabled={isLoadingMap}
         >
           <MapPin className={`w-6 h-6 ${taggingMode ? 'animate-pulse' : ''}`} />
         </button>
