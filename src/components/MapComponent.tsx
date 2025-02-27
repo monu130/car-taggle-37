@@ -456,7 +456,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   return (
     <div className="relative animate-fade-in">
       {/* Main map container */}
-      <div ref={mapContainer} className="map-container" />
+      <div ref={mapContainer} className="map-container h-[500px] w-full rounded-lg shadow-lg" style={{ minHeight: '400px' }} />
       
       {/* Floating action buttons */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
