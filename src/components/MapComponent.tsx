@@ -2,8 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { useToast } from "@/components/ui/toaster";
-import { MapPin, Navigation, Trash2, Car, Store } from 'lucide-react';
+import { MapPin, Navigation, Trash2, Car, Store, MapPinOff } from 'lucide-react';
 import MapService, { TaggedLocation } from '@/services/MapService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,8 +19,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const marker = useRef<mapboxgl.Marker | null>(null);
-  const [mapboxToken, setMapboxToken] = useState<string | null>(MapService.getMapboxToken());
-  const [tokenInput, setTokenInput] = useState<string>('');
+  const currentLocationMarker = useRef<mapboxgl.Marker | null>(null);
   const [taggingMode, setTaggingMode] = useState<boolean>(false);
   const [showTagForm, setShowTagForm] = useState<boolean>(false);
   const [newTagName, setNewTagName] = useState<string>('');
@@ -32,13 +30,13 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   const navigationLine = useRef<mapboxgl.GeoJSONSource | null>(null);
 
   useEffect(() => {
-    // If no token is set, don't initialize the map
-    if (!mapboxToken) return;
-
     if (!mapContainer.current) return;
 
-    // Set mapbox token for the global mapboxgl
-    mapboxgl.accessToken = mapboxToken;
+    // Use HERE Maps API key from the service
+    const apiKey = MapService.getHereApiKey();
+    
+    // Initialize the map with Mapbox (still using Mapbox for UI but with HERE data)
+    mapboxgl.accessToken = 'pk.eyJ1IjoibG92YWJsZS1haS1kZW1vIiwiYSI6ImNsdmh1dWVvazAxczQyanBnOTk3dmxldm0ifQ.a7r5inWxbJVersIS6GN4ZA';
 
     // Initialize the map
     map.current = new mapboxgl.Map({
@@ -51,18 +49,6 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     // Add navigation controls
     map.current.addControl(
       new mapboxgl.NavigationControl(),
-      'top-right'
-    );
-
-    // Add geolocate control
-    map.current.addControl(
-      new mapboxgl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true
-        },
-        trackUserLocation: true,
-        showUserHeading: true
-      }),
       'top-right'
     );
 
@@ -130,11 +116,42 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
       getCurrentPosition();
     });
 
+    // Setup interval to update current position
+    const positionInterval = setInterval(() => {
+      getCurrentPosition();
+    }, 10000); // Update every 10 seconds
+
     // Cleanup on unmount
     return () => {
       map.current?.remove();
+      clearInterval(positionInterval);
     };
-  }, [mapboxToken]);
+  }, []);
+
+  // Update current location marker
+  const updateCurrentLocationMarker = (position: { lat: number; lng: number }) => {
+    if (!map.current) return;
+    
+    // Remove existing marker if it exists
+    if (currentLocationMarker.current) {
+      currentLocationMarker.current.remove();
+    }
+    
+    // Create custom marker element for current location
+    const el = document.createElement('div');
+    el.className = 'current-location-marker';
+    el.innerHTML = `
+      <div class="w-6 h-6 rounded-full bg-app-blue border-2 border-white flex items-center justify-center relative">
+        <div class="w-2 h-2 rounded-full bg-white"></div>
+        <div class="absolute w-12 h-12 rounded-full border-2 border-app-blue/30 animate-ping"></div>
+      </div>
+    `;
+    
+    // Add marker to map
+    currentLocationMarker.current = new mapboxgl.Marker(el)
+      .setLngLat([position.lng, position.lat])
+      .addTo(map.current);
+  };
 
   // Get user's current position
   const getCurrentPosition = () => {
@@ -142,10 +159,14 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          setCurrentPosition({ lat: latitude, lng: longitude });
+          const newPosition = { lat: latitude, lng: longitude };
+          setCurrentPosition(newPosition);
           
-          // If map is already initialized, fly to the user's location
-          if (map.current) {
+          // Update the current location marker
+          updateCurrentLocationMarker(newPosition);
+          
+          // If map is already initialized and no locations loaded yet, fly to the user's location
+          if (map.current && !Object.keys(locationMarkers.current).length) {
             map.current.flyTo({
               center: [longitude, latitude],
               zoom: 15,
@@ -164,6 +185,44 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     }
   };
 
+  // Quick tag current location
+  const quickTagCurrentLocation = () => {
+    if (!currentPosition) {
+      toast('Cannot tag location: Your current position is not available.');
+      return;
+    }
+    
+    // Show tag form with current position
+    setSelectedLocation(currentPosition);
+    setShowTagForm(true);
+    
+    // Create temporary marker at current position
+    if (marker.current) {
+      marker.current.remove();
+    }
+    
+    if (map.current) {
+      // Create custom marker element
+      const el = document.createElement('div');
+      el.className = 'map-marker animate-bounce';
+      el.innerHTML = `<span class="text-xl">📍</span>`;
+      
+      // Add marker to map
+      marker.current = new mapboxgl.Marker(el)
+        .setLngLat([currentPosition.lng, currentPosition.lat])
+        .addTo(map.current);
+    }
+    
+    // Set default name based on type
+    if (newTagType === 'car') {
+      setNewTagName('My Car');
+    } else if (newTagType === 'shop') {
+      setNewTagName('Favorite Shop');
+    } else {
+      setNewTagName('Tagged Location');
+    }
+  };
+
   // Load tagged locations from the service
   const loadTaggedLocations = () => {
     if (!map.current) return;
@@ -175,9 +234,11 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     // Get saved locations
     const locations = MapService.getTaggedLocations();
 
-    // Add markers for each location
-    locations.forEach(location => {
-      addLocationMarker(location);
+    // Add markers for each location with staggered animation
+    locations.forEach((location, index) => {
+      setTimeout(() => {
+        addLocationMarker(location);
+      }, index * 200); // Stagger by 200ms
     });
   };
 
@@ -187,7 +248,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
 
     // Create a custom marker element
     const el = document.createElement('div');
-    el.className = 'map-marker';
+    el.className = 'map-marker animate-zoom-in';
 
     // Set icon based on type
     if (location.type === 'car') {
@@ -210,6 +271,12 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     } else {
       el.innerHTML = `<span>📍</span>`;
     }
+
+    // Add name label to marker
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'map-marker-label';
+    nameLabel.innerText = location.name;
+    el.appendChild(nameLabel);
 
     // Create popup
     const popup = new mapboxgl.Popup({ offset: 25 })
@@ -329,15 +396,6 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     }
   };
 
-  // Save Mapbox token
-  const saveMapboxToken = () => {
-    if (tokenInput.trim() !== '') {
-      MapService.setMapboxToken(tokenInput);
-      setMapboxToken(tokenInput);
-      toast('Mapbox token saved successfully!');
-    }
-  };
-
   // Toggle tagging mode
   const toggleTaggingMode = () => {
     setTaggingMode(!taggingMode);
@@ -390,48 +448,34 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
     toast('Location tagged successfully!');
   };
 
-  // If no token is set, show the token input form
-  if (!mapboxToken) {
-    return (
-      <div className="glass-panel max-w-md mx-auto animate-fade-in">
-        <h2 className="text-2xl font-bold mb-4 text-center">Welcome to SpotTag!</h2>
-        <p className="mb-6 text-center">
-          To get started, please enter your Mapbox token.
-        </p>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Mapbox Token</label>
-            <Input
-              type="text"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="Enter your Mapbox token"
-              className="w-full"
-            />
-            <p className="text-xs text-gray-500">
-              You can get a Mapbox token at <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noreferrer" className="text-app-blue underline">mapbox.com</a>
-            </p>
-          </div>
-          <Button onClick={saveMapboxToken} className="w-full btn-primary">
-            Save Token
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="relative animate-fade-in">
       {/* Main map container */}
       <div ref={mapContainer} className="map-container" />
       
-      {/* Tagging mode button */}
-      <button
-        className={`floating-action-button ${taggingMode ? 'bg-app-green' : 'bg-app-pink'}`}
-        onClick={toggleTaggingMode}
-      >
-        <MapPin className={`w-6 h-6 ${taggingMode ? 'animate-pulse' : ''}`} />
-      </button>
+      {/* Floating action buttons */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+        {/* Quick tag current location button */}
+        <button
+          className="floating-action-button bg-app-blue flex items-center justify-center"
+          onClick={quickTagCurrentLocation}
+          title="Tag my current location"
+        >
+          <div className="relative">
+            <MapPin className="w-6 h-6" />
+            <span className="absolute -top-1 -right-1 text-sm bg-white text-app-blue rounded-full w-4 h-4 flex items-center justify-center font-bold">+</span>
+          </div>
+        </button>
+        
+        {/* Toggle map tagging mode button */}
+        <button
+          className={`floating-action-button ${taggingMode ? 'bg-app-green' : 'bg-app-pink'}`}
+          onClick={toggleTaggingMode}
+          title="Toggle map tagging mode"
+        >
+          <MapPin className={`w-6 h-6 ${taggingMode ? 'animate-pulse' : ''}`} />
+        </button>
+      </div>
       
       {/* Tag form */}
       {showTagForm && selectedLocation && (

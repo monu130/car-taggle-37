@@ -126,7 +126,7 @@
   }
 
   .floating-action-button {
-    @apply fixed bottom-6 right-6 bg-app-pink rounded-full w-14 h-14 flex items-center justify-center shadow-lg text-white transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95;
+    @apply rounded-full w-14 h-14 flex items-center justify-center shadow-lg text-white transition-all duration-300 hover:scale-110 hover:shadow-xl active:scale-95 z-50;
   }
 }
 
@@ -140,7 +140,15 @@
 }
 
 .map-marker {
-  @apply w-10 h-10 rounded-full bg-app-yellow flex items-center justify-center text-black shadow-md border-2 border-white;
+  @apply w-10 h-10 rounded-full bg-app-yellow flex items-center justify-center text-black shadow-md border-2 border-white relative;
+}
+
+.map-marker-label {
+  @apply absolute -bottom-7 left-1/2 transform -translate-x-1/2 bg-white/90 px-2 py-0.5 rounded-lg text-xs font-semibold shadow-sm whitespace-nowrap max-w-[100px] truncate text-center;
+}
+
+.current-location-marker {
+  @apply z-50;
 }
 
 .location-dot {
@@ -160,4 +168,19 @@
   60% { transform: translateX(5px) rotate(3deg); }
   75% { transform: translateX(-3px) rotate(-1deg); }
   90% { transform: translateX(3px) rotate(1deg); }
+}
+
+@keyframes zoom-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-zoom-in {
+  animation: zoom-in 0.5s ease-out forwards;
 }
