@@ -1,24 +1,21 @@
 
 // MapService handles map operations and location data
 class MapService {
-  // Store the Mapbox token
-  private static mapboxToken: string | null = null;
+  // HERE Maps API credentials (free tier)
+  private static readonly HERE_API_KEY = 'yfGGKBfKinFIRfCTbO60R-8e0712R8JY8t8ykh789Pc';
+  private static readonly HERE_APP_ID = 'ylw1AtAEyAGPEW4m6FPf';
 
   // Store tagged locations 
   private static taggedLocations: TaggedLocation[] = [];
 
-  // Set the Mapbox token
-  static setMapboxToken(token: string): void {
-    this.mapboxToken = token;
-    localStorage.setItem('mapbox_token', token);
+  // Get the HERE API Key
+  static getHereApiKey(): string {
+    return this.HERE_API_KEY;
   }
 
-  // Get the Mapbox token
-  static getMapboxToken(): string | null {
-    if (!this.mapboxToken) {
-      this.mapboxToken = localStorage.getItem('mapbox_token');
-    }
-    return this.mapboxToken;
+  // Get the HERE App ID
+  static getHereAppId(): string {
+    return this.HERE_APP_ID;
   }
 
   // Save a tagged location
