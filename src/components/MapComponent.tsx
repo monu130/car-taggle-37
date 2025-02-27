@@ -32,11 +32,9 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    // Use HERE Maps API key from the service
-    const apiKey = MapService.getHereApiKey();
-    
-    // Initialize the map with Mapbox (still using Mapbox for UI but with HERE data)
-    mapboxgl.accessToken = 'pk.eyJ1IjoibG92YWJsZS1haS1kZW1vIiwiYSI6ImNsdmh1dWVvazAxczQyanBnOTk3dmxldm0ifQ.a7r5inWxbJVersIS6GN4ZA';
+    // Get Mapbox token from service
+    const mapboxToken = MapService.getMapboxToken();
+    mapboxgl.accessToken = mapboxToken;
 
     // Initialize the map
     map.current = new mapboxgl.Map({
@@ -80,6 +78,8 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
 
     // On map load, add navigation line source
     map.current.on('load', () => {
+      console.log("Map loaded successfully");
+      
       map.current!.addSource('navigation-route', {
         type: 'geojson',
         data: {
@@ -233,6 +233,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
 
     // Get saved locations
     const locations = MapService.getTaggedLocations();
+    console.log("Loading tagged locations:", locations);
 
     // Add markers for each location with staggered animation
     locations.forEach((location, index) => {
@@ -245,6 +246,8 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
   // Add a marker for a tagged location
   const addLocationMarker = (location: TaggedLocation) => {
     if (!map.current) return;
+
+    console.log("Adding marker for location:", location);
 
     // Create a custom marker element
     const el = document.createElement('div');
@@ -427,6 +430,8 @@ const MapComponent: React.FC<MapComponentProps> = ({ onLocationSelected }) => {
       longitude: selectedLocation.lng,
       createdAt: new Date().toISOString()
     };
+    
+    console.log("Saving new location:", newLocation);
     
     // Save to service
     MapService.saveTaggedLocation(newLocation);

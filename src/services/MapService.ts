@@ -1,21 +1,15 @@
 
 // MapService handles map operations and location data
 class MapService {
-  // HERE Maps API credentials (free tier)
-  private static readonly HERE_API_KEY = 'yfGGKBfKinFIRfCTbO60R-8e0712R8JY8t8ykh789Pc';
-  private static readonly HERE_APP_ID = 'ylw1AtAEyAGPEW4m6FPf';
-
+  // Default Mapbox token (public token for demo purposes)
+  private static readonly DEFAULT_MAPBOX_TOKEN = 'pk.eyJ1IjoibG92YWJsZS1haS1kZW1vIiwiYSI6ImNsdmh1dWVvazAxczQyanBnOTk3dmxldm0ifQ.a7r5inWxbJVersIS6GN4ZA';
+  
   // Store tagged locations 
   private static taggedLocations: TaggedLocation[] = [];
 
-  // Get the HERE API Key
-  static getHereApiKey(): string {
-    return this.HERE_API_KEY;
-  }
-
-  // Get the HERE App ID
-  static getHereAppId(): string {
-    return this.HERE_APP_ID;
+  // Get the Mapbox token
+  static getMapboxToken(): string {
+    return this.DEFAULT_MAPBOX_TOKEN;
   }
 
   // Save a tagged location
